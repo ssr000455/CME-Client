@@ -16,7 +16,6 @@ jobs:
 
       - name: Install Android NDK (Manually)
         run: |
-          # 直接下载 NDK r26b (稳定版)，绕过 setup-android 的报错
           wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
           unzip -q android-ndk-r26b-linux.zip
           echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-ndk-r26b" >> $GITHUB_ENV
@@ -26,45 +25,56 @@ jobs:
         run: |
           git clone --depth 1 --branch v1.86.11 --recurse-submodules --shallow-submodules https://github.com/SpaiR/imgui-java.git /tmp/imgui-java
           rm -rf /tmp/imgui-java/include/imnodes/vcpkg
-          
+
           cd /tmp/imgui-java
-          
-          # 注释掉 Ant 编译步骤
-          sed -i 's/BuildExecutor.executeAnt.*/\/\/ &/g' buildSrc/src/main/groovy/tool/generator/GenerateLibs.groovy
-          sed -i "s/BuildExecutor.executeAnt(jniDir + '\/build.xml', '-v', 'pack-natives')/return \/\/ &/" buildSrc/src/main/groovy/tool/generator/GenerateLibs.groovy
+
+          # 用 Python 安全替换，避免 sed 破坏 Groovy 语法
+          python3 << 'PYEOF'
+          file_path = 'buildSrc/src/main/groovy/tool/generator/GenerateLibs.groovy'
+          with open(file_path, 'r') as f:
+              content = f.read()
+          target = "BuildExecutor.executeAnt(jniDir + '/build.xml', '-v', 'pack-natives')"
+          if target not in content:
+              raise SystemExit(f"Target line not found in {file_path}")
+          content = content.replace(target, "return")
+          with open(file_path, 'w') as f:
+              f.write(content)
+          print("Groovy patched successfully.")
+          PYEOF
+
+          # 跑 Gradle 生成源码，不管 Ant 编译结果
           ./gradlew imgui-binding:generateLibs -Denvs=linux || true
-          
+
           if [ ! -d "/tmp/imgui/jni" ]; then
             echo "源码生成失败"
             exit 1
           fi
-          
+
           mkdir -p $GITHUB_WORKSPACE/src/main/cpp/generated
           cp -r /tmp/imgui/jni/* $GITHUB_WORKSPACE/src/main/cpp/generated/
 
       - name: Compile with Android NDK (CMake)
         run: |
-          # 注意这里使用的是刚才手动安装的 NDK 环境变量
           cat > CMakeLists.txt << 'CMEOF'
           cmake_minimum_required(VERSION 3.22)
           project(imgui-java64)
           set(CMAKE_CXX_STANDARD 17)
-          
+
           file(GLOB_RECURSE JNI_SOURCES "src/main/cpp/generated/*.cpp")
-          
+
           add_library(imgui-java64 SHARED ${JNI_SOURCES})
-          
-          target_include_directories(imgui-java64 PRIVATE 
+
+          target_include_directories(imgui-java64 PRIVATE
             "src/main/cpp/generated"
             "src/main/cpp/generated/misc/cpp"
           )
-          
+
           target_compile_definitions(imgui-java64 PRIVATE
             IMGUI_IMPL_API="extern \"C\""
           )
-          
+
           target_link_libraries(imgui-java64 PRIVATE log android)
-          
+
           set_target_properties(imgui-java64 PROPERTIES
             PREFIX "lib"
             OUTPUT_NAME "imgui-java64"
@@ -78,9 +88,9 @@ jobs:
             -DANDROID_STL=c++_shared \
             -DCMAKE_BUILD_TYPE=Release \
             -S . -B build-arm64
-          
+
           cmake --build build-arm64 -j$(nproc)
-          
+
           mkdir -p src/main/resources/natives/linux-arm64
           cp build-arm64/libimgui-java64.so src/main/resources/natives/linux-arm64/
 
