@@ -1,0 +1,13 @@
+{
+"required": true,
+"package": "com.chengmo.cmeclient.mixin",
+"compatibilityLevel": "JAVA_17",
+"client": [
+"PlayerEntityMixin",
+"MinecraftClientMixin",
+"MouseMixin"
+],
+"injectors": {
+"defaultRequire": 1
+}
+}

@@ -1,0 +1,55 @@
+name: Build CME Client
+
+on: [push, pull_request, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - name: Compile ImGui Native Library (ARM64)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake git
+          
+          # 下载 imgui-java 源码（含 C++ JNI 源码）
+          git clone --depth 1 https://github.com/SpaiR/imgui-java.git /tmp/imgui-java
+          cd /tmp/imgui-java
+          
+          # 模拟官方生成所需的文件，然后用我们自己的 CMake 交叉编译
+          # 注意：这个结构是 imgui-java 仓库的 C++ 源码目录，官方构建其实是调这堆文件
+          cd imgui-binding/src/main/cpp
+          
+          # 手动配置并编译
+          mkdir build
+          cd build
+          cmake .. \
+            -DCMAKE_SYSTEM_NAME=Linux \
+            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
+            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
+            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_CXX_FLAGS="-fPIC"
+          
+          make -j$(nproc)
+          
+          mkdir -p $GITHUB_WORKSPACE/src/main/resources/natives/linux-arm64
+          cp libimgui-java64.so $GITHUB_WORKSPACE/src/main/resources/natives/linux-arm64/
+
+      - name: Build Fabric Mod
+        run: |
+          chmod +x ./gradlew
+          ./gradlew build -x check
+
+      - name: Upload Mod
+        uses: actions/upload-artifact@v4
+        with:
+          name: CME-Client
+          path: build/libs/*.jar
