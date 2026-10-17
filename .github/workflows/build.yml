@@ -31,6 +31,7 @@ jobs:
           
           # 注释掉 Ant 编译步骤
           sed -i 's/BuildExecutor.executeAnt.*/\/\/ &/g' buildSrc/src/main/groovy/tool/generator/GenerateLibs.groovy
+          sed -i "s/BuildExecutor.executeAnt(jniDir + '\/build.xml', '-v', 'pack-natives')/return \/\/ &/" buildSrc/src/main/groovy/tool/generator/GenerateLibs.groovy
           ./gradlew imgui-binding:generateLibs -Denvs=linux || true
           
           if [ ! -d "/tmp/imgui/jni" ]; then
