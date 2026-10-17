@@ -47,6 +47,11 @@ jobs:
           mkdir -p $GITHUB_WORKSPACE/src/main/cpp/generated
           cp -r /tmp/imgui/jni/* $GITHUB_WORKSPACE/src/main/cpp/generated/
 
+      - name: Fix JNI Version for Android
+        run: |
+          # Android NDK 没有 JNI_VERSION_1_8 宏，全局替换为 1.6
+          find $GITHUB_WORKSPACE/src/main/cpp/generated -type f -name "*.cpp" -exec sed -i 's/JNI_VERSION_1_8/JNI_VERSION_1_6/g' {} +
+
       - name: Compile with Android NDK (CMake)
         run: |
           cat > CMakeLists.txt << 'CMEOF'
