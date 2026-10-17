@@ -19,7 +19,7 @@ public class MouseMixin {
         
         ImGuiIO io = ImGui.getIO();
         if (ClickGUI.isOpen) {
-            io.addMouseButtonEvent(button, action == 1);
+            io.setMouseDown(button, action == 1);
             if (io.getWantCaptureMouse()) {
                 ci.cancel();
             }
@@ -32,7 +32,7 @@ public class MouseMixin {
         
         ImGuiIO io = ImGui.getIO();
         if (ClickGUI.isOpen) {
-            io.addMousePosEvent((float)x, (float)y);
+            io.setMousePos((float)x, (float)y);
             if (io.getWantCaptureMouse()) {
                 ci.cancel();
             }

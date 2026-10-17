@@ -22,11 +22,8 @@ public class MinecraftClientMixin {
             imGuiGl3.init("#version 150");
         }
         
-        imGuiGl3.newFrame();
         ImGui.newFrame();
-        
         ClickGUI.render();
-        
         ImGui.render();
         imGuiGl3.renderDrawData(ImGui.getDrawData());
     }
