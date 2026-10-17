@@ -14,34 +14,79 @@ jobs:
           java-version: '17'
           distribution: 'temurin'
 
-      - name: Compile ImGui Native Library (ARM64)
+      - name: Setup Android NDK
+        uses: android-actions/setup-android@v3
+
+      - name: Generate ImGui Sources using Official Generator
         run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu cmake git
+          # 1. 下载官方完整源码和子模块 (不拉 vcpkg，太慢了)
+          git clone --depth 1 --branch v1.86.11 --recurse-submodules --shallow-submodules https://github.com/SpaiR/imgui-java.git /tmp/imgui-java
+          rm -rf /tmp/imgui-java/include/imnodes/vcpkg
           
-          # 下载 imgui-java 源码（含 C++ JNI 源码）
-          git clone --depth 1 https://github.com/SpaiR/imgui-java.git /tmp/imgui-java
           cd /tmp/imgui-java
+
+          # 2. 抹掉它的 Ant 编译步骤，只让 Gradle 帮我们生成 C++ JNI 胶水和拷贝所有源码
+          # 这样它会由于最后找不到 .so 而报错，但我们用 || true 忽略它
+          sed -i 's/BuildExecutor.executeAnt.*/\/\/ &/g' buildSrc/src/main/groovy/tool/generator/GenerateLibs.groovy
+          ./gradlew imgui-binding:generateLibs -Denvs=linux || true
+
+          # 3. 验证源文件是否成功生成到 /tmp/imgui/jni
+          if [ ! -d "/tmp/imgui/jni" ]; then
+            echo "源码生成失败，检查 Gradle 输出"
+            exit 1
+          fi
           
-          # 模拟官方生成所需的文件，然后用我们自己的 CMake 交叉编译
-          # 注意：这个结构是 imgui-java 仓库的 C++ 源码目录，官方构建其实是调这堆文件
-          cd imgui-binding/src/main/cpp
+          # 4. 把生成的完整源码树塞进我们项目里
+          mkdir -p $GITHUB_WORKSPACE/src/main/cpp/generated
+          cp -r /tmp/imgui/jni/* $GITHUB_WORKSPACE/src/main/cpp/generated/
+
+      - name: Compile with Android NDK (CMake)
+        run: |
+          export ANDROID_NDK_HOME=$ANDROID_NDK_LATEST_HOME
           
-          # 手动配置并编译
-          mkdir build
-          cd build
-          cmake .. \
-            -DCMAKE_SYSTEM_NAME=Linux \
-            -DCMAKE_SYSTEM_PROCESSOR=aarch64 \
-            -DCMAKE_C_COMPILER=aarch64-linux-gnu-gcc \
-            -DCMAKE_CXX_COMPILER=aarch64-linux-gnu-g++ \
+          # 5. 临时写一个直接收编所有生成源码的 CMakeLists
+          cat > CMakeLists.txt << 'CMEOF'
+          cmake_minimum_required(VERSION 3.22)
+          project(imgui-java64)
+          set(CMAKE_CXX_STANDARD 17)
+          
+          # 抓取所有生成的 .cpp 文件（包括 JNI 胶水和 ImGui 核心逻辑）
+          file(GLOB_RECURSE JNI_SOURCES "src/main/cpp/generated/*.cpp")
+          
+          add_library(imgui-java64 SHARED ${JNI_SOURCES})
+          
+          target_include_directories(imgui-java64 PRIVATE 
+            "src/main/cpp/generated"
+            "src/main/cpp/generated/misc/cpp"
+          )
+          
+          # 安卓特有的头文件依赖
+          target_compile_definitions(imgui-java64 PRIVATE
+            IMGUI_IMPL_API="extern \"C\""
+          )
+          
+          target_link_libraries(imgui-java64 PRIVATE log android)
+          
+          set_target_properties(imgui-java64 PROPERTIES
+            PREFIX "lib"
+            OUTPUT_NAME "imgui-java64"
+          )
+          CMEOF
+
+          # 6. 使用 NDK 跨平台编译
+          cmake -B build-arm64 \
+            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-26 \
+            -DANDROID_STL=c++_shared \
             -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_CXX_FLAGS="-fPIC"
+            -S . -B build-arm64
           
-          make -j$(nproc)
+          cmake --build build-arm64 -j$(nproc)
           
-          mkdir -p $GITHUB_WORKSPACE/src/main/resources/natives/linux-arm64
-          cp libimgui-java64.so $GITHUB_WORKSPACE/src/main/resources/natives/linux-arm64/
+          # 7. 存放到 Fabric Mod 的资源目录
+          mkdir -p src/main/resources/natives/linux-arm64
+          cp build-arm64/libimgui-java64.so src/main/resources/natives/linux-arm64/
 
       - name: Build Fabric Mod
         run: |
