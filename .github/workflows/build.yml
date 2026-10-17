@@ -70,7 +70,7 @@ jobs:
           )
 
           target_compile_definitions(imgui-java64 PRIVATE
-            IMGUI_IMPL_API="extern \"C\""
+            "IMGUI_IMPL_API=extern \"C\""
           )
 
           target_link_libraries(imgui-java64 PRIVATE log android)
