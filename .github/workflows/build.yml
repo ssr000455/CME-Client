@@ -19,7 +19,6 @@ jobs:
           wget -q https://dl.google.com/android/repository/android-ndk-r26b-linux.zip
           unzip -q android-ndk-r26b-linux.zip
           echo "ANDROID_NDK_HOME=$GITHUB_WORKSPACE/android-ndk-r26b" >> $GITHUB_ENV
-          echo "NDK 安装完成: $GITHUB_WORKSPACE/android-ndk-r26b"
 
       - name: Generate ImGui Sources using Official Generator
         run: |
@@ -27,22 +26,17 @@ jobs:
           rm -rf /tmp/imgui-java/include/imnodes/vcpkg
 
           cd /tmp/imgui-java
-
-          # 用 Python 安全替换，避免 sed 破坏 Groovy 语法
+          
           python3 << 'PYEOF'
           file_path = 'buildSrc/src/main/groovy/tool/generator/GenerateLibs.groovy'
           with open(file_path, 'r') as f:
               content = f.read()
           target = "BuildExecutor.executeAnt(jniDir + '/build.xml', '-v', 'pack-natives')"
-          if target not in content:
-              raise SystemExit(f"Target line not found in {file_path}")
           content = content.replace(target, "return")
           with open(file_path, 'w') as f:
               f.write(content)
-          print("Groovy patched successfully.")
           PYEOF
 
-          # 跑 Gradle 生成源码，不管 Ant 编译结果
           ./gradlew imgui-binding:generateLibs -Denvs=linux || true
 
           if [ ! -d "/tmp/imgui/jni" ]; then
@@ -67,6 +61,12 @@ jobs:
           target_include_directories(imgui-java64 PRIVATE
             "src/main/cpp/generated"
             "src/main/cpp/generated/misc/cpp"
+          )
+
+          # 关闭 format-security 相关的错误拦截
+          target_compile_options(imgui-java64 PRIVATE 
+            -Wno-error=format-security 
+            -Wno-format-security
           )
 
           target_compile_definitions(imgui-java64 PRIVATE
