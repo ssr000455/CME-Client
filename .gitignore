@@ -42,3 +42,5 @@ replay_*.log
 z4.sh
 
 result.txt
+
+src/main/resources/natives/linux-arm64/libimgui-java64.so
