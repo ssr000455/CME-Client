@@ -15,6 +15,7 @@ mavenCentral()
 }
 
 loom {
+    accessWidenerPath = file("src/main/resources/cmeclient.accesswidener")
     splitEnvironmentSourceSets()
 
 mods {

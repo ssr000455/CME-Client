@@ -67,13 +67,18 @@ jobs:
             "src/main/cpp/generated/misc/cpp"
           )
 
+          # 开启 O3 优化，隐藏不必要符号，禁用 format 警告
           target_compile_options(imgui-java64 PRIVATE 
             -Wno-error=format-security 
             -Wno-format-security
+            -fvisibility=hidden
+            -O3
           )
 
+          # 定义 8192 纹理上限，支撑全字库
           target_compile_definitions(imgui-java64 PRIVATE
             "IMGUI_IMPL_API=extern \"C\""
+            "IMGUI_MAX_TEXTURE_SIZE=8192"
           )
 
           target_link_libraries(imgui-java64 PRIVATE log android)
@@ -81,6 +86,8 @@ jobs:
           set_target_properties(imgui-java64 PROPERTIES
             PREFIX "lib"
             OUTPUT_NAME "imgui-java64"
+            CXX_VISIBILITY_PRESET hidden
+            VISIBILITY_INLINES_HIDDEN ON
           )
           CMEOF
 
